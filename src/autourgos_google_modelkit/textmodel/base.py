@@ -8,96 +8,33 @@ Version: 0.1.0
 """
 
 from typing import Optional, Any, Dict, Iterator
-import os
 import time
-import warnings
-import sys
 import re
-from string import Formatter
-from contextlib import contextmanager
 
-from .models import MODEL, THINKING_LEVEL, resolve_model_pricing
+from .models import (
+    GOOGLE_TEXT_MODEL_NAME,
+    GOOGLE_TEXT_THINKING_LEVEL,
+    resolve_model_pricing,
+)
+from ..core import (
+    configure_runtime_environment,
+    suppress_stderr,
+    load_genai_module,
+    normalize_model_name,
+    normalize_thinking_level,
+    validate_thinking_level_support,
+    resolve_api_key,
+    build_generation_config,
+    extract_template_fields,
+    coerce_prompt_variable,
+    configure_genai_client,
+    extract_text_from_response,
+    build_structured_output,
+)
 
 
-"""Environment Configuration.
-
-This section reduces noisy runtime diagnostics from underlying gRPC/logging
-libraries. ``setdefault`` preserves deployment-provided environment values.
-"""
-os.environ.setdefault('GRPC_VERBOSITY', 'ERROR')
-os.environ.setdefault('GLOG_minloglevel', '2')
-os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '3')
-
-"""Suppress Python warnings emitted by gRPC internals."""
-warnings.filterwarnings('ignore', category=UserWarning, module='.*grpc.*')
-
-@contextmanager
-def suppress_stderr():
-    """Temporarily suppress stderr noise produced by SDK internals.
-
-    This context manager suppresses both Python-level ``sys.stderr`` writes and,
-    when possible, low-level file descriptor writes to stderr. It is primarily
-    used around Google SDK import/configuration and request calls to avoid
-    verbose gRPC diagnostics leaking into user logs.
-
-    Yields:
-        None. Control returns to the wrapped block while stderr is muted.
-
-    Notes:
-        - The low-level redirection may fail on some runtimes; in that case,
-          Python-level stderr suppression still applies.
-        - Original stderr state is always restored in ``finally``.
-    """
-    import io
-    
-    original_stderr = sys.stderr
-    original_stderr_fd = None
-    
-    try:
-        """Save and redirect the low-level stderr file descriptor."""
-        try:
-            original_stderr_fd = os.dup(2)
-            devnull = os.open(os.devnull, os.O_WRONLY)
-            os.dup2(devnull, 2)
-            os.close(devnull)
-        except Exception:
-            pass
-        
-        """Redirect Python-level stderr writes during the protected block."""
-        sys.stderr = io.StringIO()
-        yield
-    finally:
-        """Restore stderr state for both low-level and Python-level streams."""
-        if original_stderr_fd is not None:
-            try:
-                os.dup2(original_stderr_fd, 2)
-                os.close(original_stderr_fd)
-            except Exception:
-                pass
-        sys.stderr = original_stderr
-
-"""Module-Level Client Import.
-
-Importing at module load avoids repeated import overhead and supports both the
-legacy and current packaging paths used by Google Gemini SDK releases.
-"""
-_GOOGLE_GENAI_AVAILABLE = False
-genai_module = None
-_GOOGLE_IMPORT_ERROR: Optional[str] = None
-try:
-    with suppress_stderr():
-        try:
-            """Preferred import path for the older google-generativeai SDK."""
-            import google.generativeai as genai_module  # type: ignore
-            _GOOGLE_GENAI_AVAILABLE = True
-        except Exception:
-            """Fallback import path used by newer google-genai style packaging."""
-            from google import genai as genai_module  # type: ignore
-            _GOOGLE_GENAI_AVAILABLE = True
-except Exception as exc:
-    _GOOGLE_GENAI_AVAILABLE = False
-    genai_module = None
-    _GOOGLE_IMPORT_ERROR = str(exc)
+configure_runtime_environment()
+_GOOGLE_GENAI_AVAILABLE, genai_module, _GOOGLE_IMPORT_ERROR = load_genai_module()
 
 
 """Custom Exception Hierarchy used by this provider."""
@@ -148,324 +85,15 @@ class GoogleTextModelResponseError(GoogleTextModelError):
     """
 
 
-def _normalize_model_name(model: str | MODEL) -> str:
-    """Normalize model input into a stable model-id string.
-
-    Args:
-        model: Either a raw model name string or an enum-like object whose
-            ``value`` contains the model identifier.
-
-    Returns:
-        A non-empty model identifier string.
-
-    Raises:
-        ValueError: If the model cannot be resolved to a non-empty string.
-    """
-    if isinstance(model, str):
-        model_name = model.strip()
-        if model_name:
-            return model_name
-        raise ValueError("model must be a non-empty string")
-
-    """Support enum-like objects whose .value stores the model identifier."""
-    value = getattr(model, "value", None)
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-
-    model_name = str(model).strip()
-    if model_name:
-        return model_name
-    raise ValueError("model must be a non-empty string")
-
-
-def _normalize_thinking_level(thinking_level: str | THINKING_LEVEL | None) -> Optional[str]:
-    """Normalize thinking level input into one of the supported string values."""
-    if thinking_level is None:
-        return None
-
-    if isinstance(thinking_level, THINKING_LEVEL):
-        return thinking_level.value
-
-    if isinstance(thinking_level, str):
-        normalized = thinking_level.strip().lower()
-        if normalized in {"minimal", "low", "medium", "high"}:
-            return normalized
-    raise ValueError("thinking_level must be one of: minimal, low, medium, high")
-
-
-def _validate_thinking_level_support(model_name: str, thinking_level: Optional[str]) -> None:
-    """Validate model-specific thinking level support from Gemini 3 docs."""
-    if thinking_level is None:
-        return
-
-    model_name_normalized = model_name.strip().lower()
-    minimal_unsupported_models = {
-        "gemini-3.1-pro-preview",
-        "gemini-3-pro-preview",
-        "gemini-3.1-pro-preview-customtools",
-    }
-
-    if thinking_level == "minimal" and model_name_normalized in minimal_unsupported_models:
-        raise ValueError(
-            f"thinking_level='minimal' is not supported for model '{model_name}'. "
-            "Use low, medium, or high."
-        )
-
-
-def _resolve_api_key(api_key: Optional[str]) -> Optional[str]:
-    """Resolve API key from explicit input and supported environment fallbacks.
-
-    Resolution order:
-        1. Explicit ``api_key`` argument
-        2. ``GOOGLE_API_KEY`` environment variable
-        3. ``GEMINI_API_KEY`` environment variable
-
-    Args:
-        api_key: Optional explicit key passed by caller.
-
-    Returns:
-        Resolved API key string, or ``None`` if no source is available.
-    """
-    return api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-
-
-def _build_generation_config(
-    *,
-    temperature: Optional[float],
-    top_p: Optional[float],
-    top_k: Optional[int],
-    max_tokens: Optional[int],
-    thinking_level: Optional[str],
-) -> Dict[str, Any]:
-    """Build a generation configuration dictionary for Gemini SDK calls.
-
-    Only explicitly provided values are included so the SDK can apply its own
-    defaults for omitted fields.
-
-    Args:
-        temperature: Sampling temperature.
-        top_p: Nucleus sampling probability mass.
-        top_k: Top-k sampling bound.
-        max_tokens: Maximum output token count.
-
-    Returns:
-        Configuration dictionary compatible with supported SDK call patterns.
-    """
-    generation_config: Dict[str, Any] = {}
-    if temperature is not None:
-        generation_config["temperature"] = temperature
-    if top_p is not None:
-        generation_config["top_p"] = top_p
-    if top_k is not None:
-        generation_config["top_k"] = top_k
-    if max_tokens is not None:
-        generation_config["max_output_tokens"] = max_tokens
-    if thinking_level is not None:
-        generation_config["thinking_config"] = {"thinking_level": thinking_level}
-    return generation_config
-
-
-def _extract_template_fields(template: str) -> set[str]:
-    """Extract placeholder field names from a format template string."""
-    fields: set[str] = set()
-    for _, field_name, _, _ in Formatter().parse(template):
-        if not field_name:
-            continue
-        base_name = field_name.split("!", 1)[0].split(":", 1)[0].strip()
-        if base_name:
-            fields.add(base_name)
-    return fields
-
-
-def _coerce_prompt_variable(value: Any) -> str:
-    """Convert prompt variables into strings for template rendering."""
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _configure_genai_client(genai: Any, api_key: str) -> Any:
-    """Configure SDK auth state and optionally construct a client instance.
-
-    This helper centralizes SDK setup used by both non-streaming and streaming
-    APIs, while tolerating version differences where a ``Client`` class may not
-    exist or may require different initialization signatures.
-
-    Args:
-        genai: Imported Google SDK module.
-        api_key: Resolved API key.
-
-    Returns:
-        Client object when available, otherwise ``None``.
-    """
-    client = None
-
-    """Configure API key in SDK-global state when supported by SDK version."""
-    try:
-        with suppress_stderr():
-            cfg = getattr(genai, "configure", None)
-            if callable(cfg):
-                cfg(api_key=api_key)
-    except Exception:
-        pass
-
-    """Initialize client object for SDK versions exposing a Client class."""
-    try:
-        with suppress_stderr():
-            ClientCls = getattr(genai, "Client", None)
-            if callable(ClientCls):
-                try:
-                    client = ClientCls(api_key=api_key)
-                except TypeError:
-                    client = ClientCls()
-    except Exception:
-        pass
-
-    return client
-
-
-def _extract_text_from_response(resp: Any) -> Optional[str]:
-    """
-    Extract generated text from Google API response using defensive parsing.
-    
-    Optimized with early returns and minimal overhead for common response formats.
-    Handles multiple SDK versions and response structures for maximum compatibility.
-    
-    Args:
-        resp: Response object from Google Gemini API
-    
-    Returns:
-        Extracted text string if found, None if extraction fails
-    """
-    if resp is None:
-        return None
-
-    """Strategy 0: Raw string chunks from some stream adapters."""
-    if isinstance(resp, str) and resp.strip():
-        return resp
-
-    """Strategy 1: Direct .text attribute (most common SDK response shape)."""
-    try:
-        text = getattr(resp, "text", None)
-        if text is not None:
-            if callable(text):
-                text = text()
-            if isinstance(text, str) and text.strip():
-                return text
-    except Exception:
-        pass
-
-    """Strategy 2: Structured candidates format used by multiple SDK releases."""
-    candidates = getattr(resp, "candidates", None)
-    if candidates and isinstance(candidates, (list, tuple)) and candidates:
-        first = candidates[0]
-        
-        """Attempt candidate.content.parts[*].text and join all text fragments."""
-        content = getattr(first, "content", None)
-        if content:
-            parts = getattr(content, "parts", None)
-            if parts and isinstance(parts, (list, tuple)) and parts:
-                joined_parts: list[str] = []
-                for part in parts:
-                    part_text = getattr(part, "text", None)
-                    if isinstance(part_text, str) and part_text.strip():
-                        joined_parts.append(part_text)
-                if joined_parts:
-                    return "".join(joined_parts)
-            
-            """Fallback to content.text when parts are unavailable."""
-            content_text = getattr(content, "text", None)
-            if isinstance(content_text, str) and content_text.strip():
-                return content_text
-        
-        """Fallback to candidate.text."""
-        candidate_text = getattr(first, "text", None)
-        if isinstance(candidate_text, str) and candidate_text.strip():
-            return candidate_text
-
-    """Strategy 3: Dictionary-based responses from alternate helpers/adapters."""
-    if isinstance(resp, dict):
-        """Fast-path common flat text keys in dictionary responses."""
-        for key in ("text", "output_text", "delta", "content"):
-            value = resp.get(key)
-            if isinstance(value, str) and value.strip():
-                return value
-
-        candidates = resp.get("candidates")
-        if candidates and isinstance(candidates, (list, tuple)) and candidates:
-            first = candidates[0]
-            if isinstance(first, dict):
-                content = first.get("content")
-                if isinstance(content, dict):
-                    parts = content.get("parts")
-                    if isinstance(parts, (list, tuple)) and parts:
-                        joined_parts: list[str] = []
-                        for part in parts:
-                            if isinstance(part, dict):
-                                text = part.get("text")
-                                if isinstance(text, str) and text.strip():
-                                    joined_parts.append(text)
-                        if joined_parts:
-                            return "".join(joined_parts)
-                
-                """Try simpler structures where content/text is directly present."""
-                text = first.get("content") or first.get("text")
-                if isinstance(text, str) and text.strip():
-                    return text
-        
-        """Try top-level text field as a final fallback."""
-        text = resp.get("text")
-        if isinstance(text, str) and text.strip():
-            return text
-
-    return None
-
-
-def _extract_usage_metadata(resp: Any) -> Dict[str, Optional[int]]:
-    """Extract input/output/total token counts from SDK response metadata."""
-    usage = getattr(resp, "usage_metadata", None)
-    if usage is None:
-        return {
-            "input_tokens": None,
-            "output_tokens": None,
-            "total_tokens": None,
-        }
-
-    input_tokens = getattr(usage, "prompt_token_count", None)
-    output_tokens = getattr(usage, "candidates_token_count", None)
-    total_tokens = getattr(usage, "total_token_count", None)
-
-    return {
-        "input_tokens": int(input_tokens) if isinstance(input_tokens, int) else None,
-        "output_tokens": int(output_tokens) if isinstance(output_tokens, int) else None,
-        "total_tokens": int(total_tokens) if isinstance(total_tokens, int) else None,
-    }
-
-
-def _calculate_cost_usd(model_name: str, input_tokens: Optional[int], output_tokens: Optional[int]) -> Dict[str, Any]:
-    """Calculate request cost from model pricing and token usage."""
-    pricing = resolve_model_pricing(model_name, prompt_tokens=input_tokens)
-    if pricing is None:
-        return {
-            "value": None,
-            "display": "N/A",
-            "input_rate_per_million": None,
-            "output_rate_per_million": None,
-        }
-
-    safe_input_tokens = input_tokens or 0
-    safe_output_tokens = output_tokens or 0
-
-    input_cost = (safe_input_tokens / 1_000_000) * pricing["input_rate_per_million"]
-    output_cost = (safe_output_tokens / 1_000_000) * pricing["output_rate_per_million"]
-    total_cost = input_cost + output_cost
-
-    return {
-        "value": round(total_cost, 8),
-        "display": f"${total_cost:.8f}",
-        "input_rate_per_million": pricing["input_rate_per_million"],
-        "output_rate_per_million": pricing["output_rate_per_million"],
-    }
+_normalize_model_name = normalize_model_name
+_normalize_thinking_level = normalize_thinking_level
+_validate_thinking_level_support = validate_thinking_level_support
+_resolve_api_key = resolve_api_key
+_build_generation_config = build_generation_config
+_extract_template_fields = extract_template_fields
+_coerce_prompt_variable = coerce_prompt_variable
+_configure_genai_client = configure_genai_client
+_extract_text_from_response = extract_text_from_response
 
 
 def _build_structured_output(
@@ -475,26 +103,12 @@ def _build_structured_output(
     raw_response: Any,
 ) -> Dict[str, Any]:
     """Build structured response payload with tokens and cost."""
-    usage = _extract_usage_metadata(raw_response)
-    input_tokens = usage["input_tokens"]
-    output_tokens = usage["output_tokens"]
-    total_tokens = usage["total_tokens"]
-
-    cost = _calculate_cost_usd(model_name, input_tokens, output_tokens)
-
-    return {
-        "model": model_name,
-        "response": response_text,
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "Total_tokens": total_tokens,
-        "Cost": cost["display"],
-        "cost_details": {
-            "value_usd": cost["value"],
-            "input_rate_per_million": cost["input_rate_per_million"],
-            "output_rate_per_million": cost["output_rate_per_million"],
-        },
-    }
+    return build_structured_output(
+        model_name=model_name,
+        response_text=response_text,
+        raw_response=raw_response,
+        resolve_model_pricing=resolve_model_pricing,
+    )
 
 
 class GoogleTextModel:
@@ -504,15 +118,15 @@ class GoogleTextModel:
     Class-only interface for Google Gemini text generation.
     
     Example:
-        >>> from autourgos_google_modelkit.textmodel import MODEL
-        >>> llm = GoogleTextModel(model=MODEL.GEMINI_3_FLASH_PREVIEW, api_key="your-key")
+        >>> from autourgos_google_modelkit.textmodel import GOOGLE_TEXT_MODEL_NAME
+        >>> llm = GoogleTextModel(model=GOOGLE_TEXT_MODEL_NAME.GEMINI_3_FLASH_PREVIEW, api_key="your-key")
         >>> response = llm.invoke("What is Python?")
         >>> print(response)
     """
     
     def __init__(
         self,
-        model: str | MODEL,
+        model: str | GOOGLE_TEXT_MODEL_NAME,
         api_key: Optional[str] = None,
         *,
         prompt_template: Optional[str] = None,
@@ -520,7 +134,7 @@ class GoogleTextModel:
         top_p: Optional[float] = None,
         top_k: Optional[int] = None,
         max_tokens: Optional[int] = None,
-        thinking_level: str | THINKING_LEVEL | None = THINKING_LEVEL.MINIMAL,
+        thinking_level: str | GOOGLE_TEXT_THINKING_LEVEL | None = GOOGLE_TEXT_THINKING_LEVEL.MINIMAL,
         structured_output: bool = False,
         Stream: bool = False,
         max_retries: int = 3,
@@ -531,7 +145,7 @@ class GoogleTextModel:
         Initialize Google Gemini text model wrapper.
         
         Args:
-            model: Model identifier (e.g. MODEL.GEMINI_3_FLASH_PREVIEW or "gemini-2.5-pro")
+            model: Model identifier (e.g. GOOGLE_TEXT_MODEL_NAME.GEMINI_3_FLASH_PREVIEW or "gemini-2.5-pro")
             api_key: API key (optional if GOOGLE_API_KEY env var is set)
             prompt_template: Optional default prompt template supporting
                 Python format placeholders such as ``{task}``.
@@ -539,9 +153,9 @@ class GoogleTextModel:
             top_p: Nucleus sampling threshold (0.0-1.0)
             top_k: Top-k sampling
             max_tokens: Maximum tokens to generate
-            thinking_level: Gemini 3 thinking level (``THINKING_LEVEL`` enum or
+            thinking_level: Gemini 3 thinking level (``GOOGLE_TEXT_THINKING_LEVEL`` enum or
                 string: ``minimal``, ``low``, ``medium``, ``high``).
-                Defaults to ``THINKING_LEVEL.MINIMAL``.
+                Defaults to ``GOOGLE_TEXT_THINKING_LEVEL.MINIMAL``.
             structured_output: When ``True``, ``invoke`` returns a dictionary
                 containing response text, token usage, and estimated cost.
                 Defaults to ``False``.

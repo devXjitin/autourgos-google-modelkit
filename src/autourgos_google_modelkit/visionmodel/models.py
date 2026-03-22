@@ -1,18 +1,13 @@
-"""Typed model identifiers for Google text model integrations.
-
-This enum is used directly in public APIs so IDEs can offer autosuggest for
-valid model names when users type ``GOOGLE_TEXT_MODEL_NAME.``.
-"""
+"""Typed model identifiers for Google vision model integrations."""
 
 from enum import Enum
 from typing import Any, Dict, Optional
 
 
-class GOOGLE_TEXT_MODEL_NAME(str, Enum):
-    """Supported Google Gemini text model identifiers."""
+class GOOGLE_VISION_MODEL_NAME(str, Enum):
+    """Supported Google Gemini vision-capable model identifiers."""
 
     GEMINI_3_1_PRO_PREVIEW = "gemini-3.1-pro-preview"
-    GEMINI_3_PRO_PREVIEW = "gemini-3-pro-preview"
     GEMINI_3_FLASH_PREVIEW = "gemini-3-flash-preview"
     GEMINI_3_1_FLASH_LITE_PREVIEW = "gemini-3.1-flash-lite-preview"
     GEMINI_2_5_PRO = "gemini-2.5-pro"
@@ -20,7 +15,7 @@ class GOOGLE_TEXT_MODEL_NAME(str, Enum):
     GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
 
 
-class GOOGLE_TEXT_THINKING_LEVEL(str, Enum):
+class GOOGLE_VISION_THINKING_LEVEL(str, Enum):
     """Supported Gemini thinking levels."""
 
     MINIMAL = "minimal"
@@ -29,17 +24,16 @@ class GOOGLE_TEXT_THINKING_LEVEL(str, Enum):
     HIGH = "high"
 
 
+class GOOGLE_VISION_MEDIA_RESOLUTION(str, Enum):
+    """Supported media resolution levels for vision inputs."""
+
+    LOW = "media_resolution_low"
+    MEDIUM = "media_resolution_medium"
+    HIGH = "media_resolution_high"
+
+
 MODEL_PRICING_USD_PER_MILLION: Dict[str, Dict[str, Any]] = {
-    # Gemini 3.1 Pro pricing is tiered by prompt token count.
     "gemini-3.1-pro-preview": {
-        "input": 2.00,
-        "output": 12.00,
-        "input_over_200k": 4.00,
-        "output_over_200k": 18.00,
-        "threshold_prompt_tokens": 200_000,
-    },
-    # Kept aligned to Gemini 3 docs model table.
-    "gemini-3-pro-preview": {
         "input": 2.00,
         "output": 12.00,
         "input_over_200k": 4.00,
@@ -77,11 +71,7 @@ def resolve_model_pricing(
     *,
     prompt_tokens: Optional[int] = None,
 ) -> Optional[Dict[str, float]]:
-    """Resolve effective input/output token rates for a model.
-
-    Returns rates in USD per 1,000,000 tokens. For tiered models, the
-    ``prompt_tokens`` threshold chooses the active tier.
-    """
+    """Resolve effective input/output token rates for a model."""
     key = model_name.strip().lower()
     entry = MODEL_PRICING_USD_PER_MILLION.get(key)
     if not entry:
@@ -106,8 +96,9 @@ def resolve_model_pricing(
 
 
 __all__ = [
-    "GOOGLE_TEXT_MODEL_NAME",
-    "GOOGLE_TEXT_THINKING_LEVEL",
+    "GOOGLE_VISION_MODEL_NAME",
+    "GOOGLE_VISION_THINKING_LEVEL",
+    "GOOGLE_VISION_MEDIA_RESOLUTION",
     "MODEL_PRICING_USD_PER_MILLION",
     "resolve_model_pricing",
 ]
