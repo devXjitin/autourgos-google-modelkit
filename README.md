@@ -1,88 +1,54 @@
 # autourgos-google-kit
 
-Production-focused Google Gemini text model toolkit for Autourgos.
+Developer-friendly Google Gemini wrappers for Autourgos projects.
 
-This repository currently provides a complete text-model integration layer with:
+Autourgos is a framework currently in development. It is designed in the same problem space as LangChain and AutoGen, with a stronger focus on developer-friendly APIs and clean code.
 
-- Typed model enum for IDE autosuggest
-- Class-based API
-- Stream mode toggle via class parameter
-- Retry + exponential backoff behavior
-- Defensive response parsing for SDK compatibility
-- Clear custom exceptions for import, API, and response errors
+This package gives you two production-oriented clients:
 
-## Features
+- `GoogleTextModel` for text generation
+- `GoogleVisionModel` for image + text prompts with text output
 
-- `MODEL` enum with supported Gemini model IDs
-- `GoogleTextModel` class with `invoke()`
-- `Stream=True/False` constructor parameter (default `False`)
-- API key fallback resolution (`api_key` arg -> `GOOGLE_API_KEY` -> `GEMINI_API_KEY`)
-- Input validation for prompt, sampling parameters, retry settings, and timeouts
-- Multi-strategy SDK calls to support multiple Google client surfaces
+It focuses on clean API usage, validation, retries, and structured response metadata.
 
-## Project Layout
+## Why Use This Package
 
-```text
-autourgos-google-kit/
-  main.py
-  pyproject.toml
-  README.md
-  src/
-	autourgos_google_modelkit/
-	  textmodel/
-		__init__.py
-		base.py
-		models.py
-	  embedding/
-	  imagemodel/
-	  videomodel/
-	  visionmodel/
-```
-
-Current implementation focus is `textmodel`. Other model folders are present as scaffolding and are currently empty.
-
-## Requirements
-
-- Python `>=3.13`
-- Dependency: `google-genai>=1.68.0`
-
-From `pyproject.toml`:
-
-```toml
-[project]
-name = "autourgos-google-kit"
-requires-python = ">=3.13"
-dependencies = [
-	"google-genai>=1.68.0",
-]
-```
+- Typed model enums for safer model selection
+- One consistent class API across text and vision
+- Optional streaming mode
+- Optional structured output with token and cost metadata
+- Prompt templates with variable validation
+- Built-in retry with exponential backoff
+- API key resolution from args or environment variables
 
 ## Installation
 
-### Option 1: Install dependencies with your project workflow
+Requirements:
 
-Use your preferred tool (`pip`, `uv`, Poetry) to install project dependencies.
+- Python `>=3.13`
+- `google-genai>=1.68.0`
 
-Example using `pip`:
+Install in editable mode:
 
 ```bash
 pip install -e .
 ```
 
-### Option 2: Install runtime dependency directly
+Or install the runtime dependency directly:
 
 ```bash
-pip install google-genai>=1.68.0
+pip install "google-genai>=1.68.0"
 ```
 
-## Environment Setup
+## API Key Setup
 
-Set one of the following environment variables:
+Resolution order:
 
-- `GOOGLE_API_KEY` (preferred)
-- `GEMINI_API_KEY` (fallback)
+1. `api_key` argument
+2. `GOOGLE_API_KEY`
+3. `GEMINI_API_KEY`
 
-Windows PowerShell:
+PowerShell:
 
 ```powershell
 $env:GOOGLE_API_KEY = "your-api-key"
@@ -94,154 +60,256 @@ Bash:
 export GOOGLE_API_KEY="your-api-key"
 ```
 
-You can also pass `api_key="..."` directly to APIs.
-
 ## Quick Start
 
-### Class-based usage
+### Text generation
 
 ```python
-from autourgos_google_modelkit import GoogleTextModel, MODEL
+from autourgos_google_modelkit import GoogleTextModel, GOOGLE_TEXT_MODEL_NAME
 
 llm = GoogleTextModel(
-	model=MODEL.GEMINI_2_5_FLASH_LITE,
-	api_key="your-api-key",
+	model=GOOGLE_TEXT_MODEL_NAME.GEMINI_2_5_FLASH,
 	Stream=False,
 )
 
-response_text = llm.invoke("Explain agentic AI in simple terms.")
-print(response_text)
+print(llm.invoke("Explain RAG in simple terms."))
 ```
 
-### Stream mode usage
+Example response:
+
+```text
+RAG (Retrieval-Augmented Generation) combines search and generation.
+The model first retrieves relevant knowledge, then writes an answer using that context.
+This improves factual accuracy and reduces hallucinations.
+```
+
+### Vision generation (image + prompt)
 
 ```python
-from autourgos_google_modelkit import GoogleTextModel, MODEL
+from autourgos_google_modelkit import GoogleVisionModel, GOOGLE_VISION_MODEL_NAME
+
+vision = GoogleVisionModel(model=GOOGLE_VISION_MODEL_NAME.GEMINI_3_FLASH_PREVIEW)
+
+print(
+	vision.invoke(
+		prompt="Describe the main objects in this image.",
+		image="./sample.jpg",
+	)
+)
+```
+
+Example response:
+
+```text
+The image contains a laptop on a desk, a coffee mug, and a notebook.
+The main background is a white wall with soft daylight.
+```
+
+### Streaming mode
+
+```python
+from autourgos_google_modelkit import GoogleTextModel, GOOGLE_TEXT_MODEL_NAME
 
 llm = GoogleTextModel(
-	model=MODEL.GEMINI_2_5_FLASH,
-	api_key="your-api-key",
+	model=GOOGLE_TEXT_MODEL_NAME.GEMINI_2_5_FLASH,
 	Stream=True,
 )
 
-response_text = llm.invoke("Write a short poem about software reliability.")
-print(response_text)
+stream = llm.invoke("Write a short note on clean architecture.")
+for chunk in stream:
+	print(chunk, end="", flush=True)
+print()
 ```
 
-## API Reference
-
-### `MODEL` enum
-
-Available typed values:
-
-- `MODEL.GEMINI_3_1_PRO_PREVIEW`
-- `MODEL.GEMINI_3_PRO_PREVIEW`
-- `MODEL.GEMINI_3_FLASH_PREVIEW`
-- `MODEL.GEMINI_2_5_PRO`
-- `MODEL.GEMINI_2_5_FLASH`
-- `MODEL.GEMINI_2_5_FLASH_LITE`
-
-You may also pass raw model strings, but using `MODEL` provides better IDE autocomplete and safer model selection.
-
-### `GoogleTextModel`
-
-Constructor parameters mirror function options and store shared config:
-
-- `model`, `api_key`
-- `Stream` (bool, default `False`)
-- `temperature`, `top_p`, `top_k`, `max_tokens`
-- `max_retries`, `timeout`, `backoff_factor`
-
-Methods:
-
-- `invoke(prompt: str) -> str`
-
-Behavior:
-
-- `Stream=False` (default): non-streaming generation path
-- `Stream=True`: streaming path is used internally and aggregated text is returned
-
-## Validation Rules
-
-The text-model APIs validate:
-
-- `prompt` must be a non-empty string
-- `temperature` must be in `[0.0, 2.0]`
-- `top_p` must be in `[0.0, 1.0]`
-- `top_k` must be `>= 1` when provided
-- `max_tokens` must be `>= 1` when provided
-- `max_retries` must be an integer `>= 1`
-- `timeout` must be `> 0` when provided
-- `backoff_factor` must be `>= 0`
-
-## Error Handling
-
-The module defines a clear exception hierarchy:
-
-- `GoogleTextModelError` (base)
-- `GoogleTextModelImportError`
-- `GoogleTextModelAPIError`
-- `GoogleTextModelResponseError`
-
-Typical handling:
+Debugging chunk boundaries (optional):
 
 ```python
-from autourgos_google_modelkit import (
-	GoogleTextModel,
-	GoogleTextModelImportError,
-	GoogleTextModelAPIError,
-	GoogleTextModelResponseError,
-	MODEL,
+stream = llm.invoke("Write a short note on clean architecture.")
+for chunk in stream:
+	print(repr(chunk))
+```
+
+Example streamed chunks (illustrative only):
+
+```text
+'Clean architecture '
+'separates business logic '
+'from framework details.'
+```
+
+Note: chunk boundaries are not fixed and can vary by SDK/model/network conditions.
+
+Final assembled response:
+
+```text
+Clean architecture separates business logic from framework details.
+It improves testability, long-term maintainability, and replacement of external dependencies.
+```
+
+## Public API Surface
+
+Top-level exports:
+
+- `GoogleTextModel`
+- `GoogleVisionModel`
+- `GOOGLE_TEXT_MODEL_NAME`
+- `GOOGLE_VISION_MODEL_NAME`
+- `GOOGLE_TEXT_THINKING_LEVEL`
+- `GOOGLE_VISION_THINKING_LEVEL`
+- `GOOGLE_VISION_MEDIA_RESOLUTION`
+
+Module-level detailed exports are available under:
+
+- `autourgos_google_modelkit.textmodel`
+- `autourgos_google_modelkit.visionmodel`
+
+## Common Constructor Options
+
+Both classes support:
+
+- `model`
+- `api_key`
+- `prompt_template`
+- `temperature`, `top_p`, `top_k`, `max_tokens`
+- `thinking_level`
+- `structured_output`
+- `Stream`
+- `max_retries`, `timeout`, `backoff_factor`
+
+Vision-only:
+
+- `media_resolution`
+
+## Parameter Explanation
+
+### Core parameters (both text and vision)
+
+- `model`: Model ID as enum or string. Prefer enum for autocomplete and safer selection.
+- `api_key`: Explicit API key. If omitted, keys are resolved from environment variables.
+- `prompt_template`: Reusable template string with placeholders like `{topic}`.
+- `temperature`: Randomness control. Lower values are more deterministic; higher values are more creative.
+- `top_p`: Nucleus sampling threshold in the range `[0.0, 1.0]`.
+- `top_k`: Limits sampling to top-k token candidates.
+- `max_tokens`: Maximum output token budget.
+- `thinking_level`: Controls reasoning depth for supported Gemini models.
+- `structured_output`: Returns metadata-rich dictionary instead of plain text.
+- `Stream`: When `True`, `invoke()` returns an iterator of text chunks.
+- `max_retries`: Total retry attempts on transient failures.
+- `timeout`: Request timeout in seconds.
+- `backoff_factor`: Retry delay factor using exponential backoff.
+
+### Vision-only parameter
+
+- `media_resolution`: Vision input quality hint. Supported enum values:
+	- `GOOGLE_VISION_MEDIA_RESOLUTION.LOW`
+	- `GOOGLE_VISION_MEDIA_RESOLUTION.MEDIUM`
+	- `GOOGLE_VISION_MEDIA_RESOLUTION.HIGH`
+
+## Structured Output
+
+Set `structured_output=True` to receive response metadata (model, token usage, and estimated cost) instead of plain text.
+
+```python
+from autourgos_google_modelkit import GoogleTextModel, GOOGLE_TEXT_MODEL_NAME
+
+llm = GoogleTextModel(
+	model=GOOGLE_TEXT_MODEL_NAME.GEMINI_3_FLASH_PREVIEW,
+	structured_output=True,
 )
 
-llm = GoogleTextModel(model=MODEL.GEMINI_2_5_FLASH)
-
-try:
-	print(llm.invoke("Hello"))
-except GoogleTextModelImportError as exc:
-	print(f"Import/config error: {exc}")
-except GoogleTextModelAPIError as exc:
-	print(f"Request failed: {exc}")
-except GoogleTextModelResponseError as exc:
-	print(f"Response parse error: {exc}")
+result = llm.invoke("Summarize observability in one paragraph.")
+print(result)
 ```
 
-## Retry and Backoff Behavior
+Example response:
 
-- Default retries: `max_retries=3`
-- Backoff uses exponential delay per attempt:
+```json
+{
+	"model": "gemini-3-flash-preview",
+	"response": "Observability is the ability to understand system state from outputs like logs, metrics, and traces.",
+	"input_tokens": 10,
+	"output_tokens": 24,
+	"Total_tokens": 34,
+	"Cost": "$0.00007700",
+	"cost_details": {
+		"value_usd": 0.000077,
+		"input_rate_per_million": 0.5,
+		"output_rate_per_million": 3.0
+	}
+}
+```
 
-`sleep = backoff_factor * (2 ** (attempt - 1))`
+## Prompt Templates
 
-Example with `backoff_factor=0.5`: `0.5s`, `1.0s`, `2.0s`, ...
+You can set a reusable template in the constructor and pass only variables at call time:
 
-## SDK Compatibility Notes
+```python
+from autourgos_google_modelkit import GoogleTextModel, GOOGLE_TEXT_MODEL_NAME
 
-The provider is defensive across Google SDK variations and attempts multiple paths:
+llm = GoogleTextModel(
+	model=GOOGLE_TEXT_MODEL_NAME.GEMINI_2_5_FLASH,
+	prompt_template="Summarize this in {tone} tone:\n\n{text}",
+)
 
-- Imports from both `google.generativeai` and `google.genai`
-- Supports client-style calls when available
-- Supports `GenerativeModel` flow and helper call fallbacks
+print(
+	llm.invoke(
+		prompt_variables={
+			"tone": "concise",
+			"text": "Autourgos provides model wrappers for Gemini APIs.",
+		}
+	)
+)
+```
 
-This increases compatibility across SDK versions and deployment environments.
+Example response:
 
-## Running the Example
+```text
+Autourgos provides clean, reusable wrappers around Gemini APIs for text and vision workflows.
+```
 
-`main.py` contains a simple interactive CLI loop using `GoogleTextModel`.
+## Validation and Errors
 
-Run:
+The package validates prompt content, sampling parameters, retry settings, and type constraints before making API calls.
+
+Important behavior:
+
+- `structured_output=True` is only supported when `Stream=False`
+- `top_p` must be in `[0.0, 1.0]`
+- `temperature` must be in `[0.0, 2.0]`
+- `max_retries` must be `>= 1`
+
+Error hierarchy:
+
+- Text: `GoogleTextModelError` and specialized subclasses
+- Vision: `GoogleVisionModelError` and specialized subclasses
+
+## Project Layout
+
+```text
+src/autourgos_google_modelkit/
+  __init__.py
+  core/
+  textmodel/
+	__init__.py
+	base.py
+	models.py
+	README.md
+  visionmodel/
+	__init__.py
+	base.py
+	models.py
+	README.md
+```
+
+## Development
+
+Run tests:
 
 ```bash
-python main.py
+pytest -q
 ```
 
-Enter prompts until `exit`.
+## Notes
 
-## Current Status
-
-- Text model integration is implemented and typed.
-- Embedding/image/video/vision folders are currently placeholders.
-
-## License
-
-Add your project license details here.
+- Pricing constants in the package are convenience estimates and should be verified against current Google pricing docs before production billing decisions.
+- Avoid committing API keys in source files.

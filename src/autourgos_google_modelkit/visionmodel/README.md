@@ -1,55 +1,111 @@
-# Autourgos GoogleVisionModel Documentation
+# Vision Model
 
-GoogleVisionModel is a production-ready wrapper for Google Gemini multimodal
-requests where inputs include image(s) plus text and the output is always text.
+This module provides a production-oriented wrapper for Gemini multimodal calls (image + text input, text output).
 
-## Module Scope
+## Public Exports
 
-Location:
-
-- src/autourgos_google_modelkit/visionmodel
-
-Public exports:
-
-- MODEL
-- THINKING_LEVEL
-- MEDIA_RESOLUTION
-- MODEL_PRICING_USD_PER_MILLION
-- resolve_model_pricing
-- GoogleVisionModel
-- GoogleVisionModelError
-- GoogleVisionModelImportError
-- GoogleVisionModelAPIError
-- GoogleVisionModelResponseError
+- `GOOGLE_VISION_MODEL_NAME`
+- `GOOGLE_VISION_THINKING_LEVEL`
+- `GOOGLE_VISION_MEDIA_RESOLUTION`
+- `MODEL_PRICING_USD_PER_MILLION`
+- `resolve_model_pricing`
+- `GoogleVisionModel`
+- `GoogleVisionModelError`
+- `GoogleVisionModelImportError`
+- `GoogleVisionModelAPIError`
+- `GoogleVisionModelResponseError`
 
 ## Quick Start
 
 ```python
-from autourgos_google_modelkit.visionmodel import GoogleVisionModel, MODEL
+from autourgos_google_modelkit.visionmodel import GoogleVisionModel, GOOGLE_VISION_MODEL_NAME
 
-vision = GoogleVisionModel(model=MODEL.GEMINI_3_FLASH_PREVIEW)
+vision = GoogleVisionModel(model=GOOGLE_VISION_MODEL_NAME.GEMINI_3_FLASH_PREVIEW)
+
+print(
+    vision.invoke(
+        prompt="Describe what is visible in this image.",
+        image="./sample.jpg",
+    )
+)
+```
+
+## Supported Image Inputs
+
+Single image via `image=` and multiple images via `images=` are supported.
+
+Accepted image types:
+
+- path (`str` or `pathlib.Path`)
+- raw bytes (`bytes`)
+- dict: `{"data": bytes, "mime_type": "image/png"}`
+- tuple: `(bytes, "image/png")`
+
+## Constructor Highlights
+
+`GoogleVisionModel(...)` supports:
+
+- `model` (enum or string)
+- `api_key`
+- `prompt_template`
+- `temperature`, `top_p`, `top_k`, `max_tokens`
+- `thinking_level`
+- `media_resolution`
+- `structured_output`
+- `Stream`
+- `max_retries`, `timeout`, `backoff_factor`
+
+## Media Resolution
+
+Use enum values from `GOOGLE_VISION_MEDIA_RESOLUTION`:
+
+- `LOW`
+- `MEDIUM`
+- `HIGH`
+
+## Structured Output Example
+
+```python
+vision = GoogleVisionModel(
+    model=GOOGLE_VISION_MODEL_NAME.GEMINI_3_FLASH_PREVIEW,
+    structured_output=True,
+)
+
 result = vision.invoke(
-    prompt="Describe all objects in this image.",
-    image="./sample.jpg",
+    prompt="List major UI elements and summarize layout.",
+    image="./screen.png",
 )
 print(result)
 ```
 
-## Supported Vision Inputs
+When `structured_output=True`, return value includes response text, token usage, model name, estimated cost, and input image count.
 
-- `image`: single image input
-- `images`: list of image inputs
+## Validation Rules
 
-Accepted image value types:
+- Prompt must resolve to a non-empty string
+- At least one image must be provided via `image` or `images`
+- `temperature` in `[0.0, 2.0]`
+- `top_p` in `[0.0, 1.0]`
+- `top_k >= 1` when provided
+- `max_tokens >= 1` when provided
+- `max_retries >= 1`
+- `timeout > 0` when provided
+- `backoff_factor >= 0`
+- `structured_output=True` requires `Stream=False`
 
-- file path (`str` or `pathlib.Path`)
-- raw image bytes (`bytes`)
-- dict with keys `data` and optional `mime_type`
-- tuple `(bytes, mime_type)`
+## Retry Behavior
 
-## Notes
+Retries use exponential backoff:
 
-- Responses are always parsed as text output.
-- `Stream=True` yields incremental text chunks.
-- `structured_output=True` returns response text + token/cost metadata.
-- `MEDIA_RESOLUTION` can be supplied to tune vision fidelity.
+`sleep = backoff_factor * (2 ** (attempt - 1))`
+
+Defaults:
+
+- `max_retries=3`
+- `backoff_factor=0.5`
+
+## Error Model
+
+- `GoogleVisionModelImportError`: SDK import/configuration issues
+- `GoogleVisionModelAPIError`: request failures after retries
+- `GoogleVisionModelResponseError`: response parsing/empty output issues
