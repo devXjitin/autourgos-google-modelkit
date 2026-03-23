@@ -1,10 +1,21 @@
-# autourgos-google-kit
 
-Developer-friendly Google Gemini wrappers for Autourgos projects.
+# Autourgos Google Model Kit
+![Gemini](./README/Image_Dark.png)
+
+![Pypi](https://img.shields.io/badge/Pypi-0.1.0-blue?style=flat-square)
+![Release](https://img.shields.io/badge/Release-Early%20Development-brown?style=flat-square)
+![Framework](https://img.shields.io/badge/Framework-Autourgos-orange?style=flat-square)
+![Wrapper](https://img.shields.io/badge/Wrapper-Google-brightgreen?style=flat-square)
+![docs](https://img.shields.io/badge/docs-latest-blue?style=flat-square)
+![Developed%20by](https://img.shields.io/badge/Developed%20by-DevxJitin-gold?style=flat-square)
+![Documented%20by](https://img.shields.io/badge/Documented%20by-Sonia-silver?style=flat-square)
+
+
+Developer-friendly Google Gemini Kit for Autourgos Framework.
 
 Autourgos is a framework currently in development. It is designed in the same problem space as LangChain and AutoGen, with a stronger focus on developer-friendly APIs and clean code.
 
-This package gives you two production-oriented clients:
+This package gives you two Model Wrappers for Google Gemini APIs:
 
 - `GoogleTextModel` for text generation
 - `GoogleVisionModel` for image + text prompts with text output
@@ -13,13 +24,14 @@ It focuses on clean API usage, validation, retries, and structured response meta
 
 ## Why Use This Package
 
-- Typed model enums for safer model selection
-- One consistent class API across text and vision
-- Optional streaming mode
-- Optional structured output with token and cost metadata
-- Prompt templates with variable validation
-- Built-in retry with exponential backoff
-- API key resolution from args or environment variables
+- **Typed Model Enums**: Safer model selection using built-in enums (`GOOGLE_TEXT_MODEL_NAME`, etc.).
+- **Consistent API**: One unified class interface (`invoke`) across both text and vision models.
+- **Streaming Support**: Optional real-time streaming mode for token-by-token generation.
+- **Structured Output**: Access response text alongside token usage and estimated cost metadata.
+- **Prompt Templates**: Reusable templates with strict variable validation.
+- **Advanced Capabilities**: Full support for Gemini 3 thinking levels and vision media resolution tuning.
+- **Resilience**: Built-in retry mechanism with exponential backoff and timeout configurations.
+- **Flexible Configuration**: API key resolution from explicit arguments or standard environment variables.
 
 ## Installation
 
@@ -68,7 +80,7 @@ export GOOGLE_API_KEY="your-api-key"
 from autourgos_google_modelkit import GoogleTextModel, GOOGLE_TEXT_MODEL_NAME
 
 llm = GoogleTextModel(
-	model=GOOGLE_TEXT_MODEL_NAME.GEMINI_2_5_FLASH,
+	model=GOOGLE_TEXT_MODEL_NAME.GEMINI_3_1_PRO,
 	Stream=False,
 )
 
@@ -111,7 +123,7 @@ The main background is a white wall with soft daylight.
 from autourgos_google_modelkit import GoogleTextModel, GOOGLE_TEXT_MODEL_NAME
 
 llm = GoogleTextModel(
-	model=GOOGLE_TEXT_MODEL_NAME.GEMINI_2_5_FLASH,
+	model=GOOGLE_TEXT_MODEL_NAME.GEMINI_3_1_PRO,
 	Stream=True,
 )
 
@@ -185,25 +197,64 @@ Vision-only:
 ### Core parameters (both text and vision)
 
 - `model`: Model ID as enum or string. Prefer enum for autocomplete and safer selection.
+  ```python
+  model=GOOGLE_TEXT_MODEL_NAME.GEMINI_3_1_PRO
+  ```
 - `api_key`: Explicit API key. If omitted, keys are resolved from environment variables.
+  ```python
+  api_key="AIzaSy..."
+  ```
 - `prompt_template`: Reusable template string with placeholders like `{topic}`.
+  ```python
+  prompt_template="Explain {topic} in simple terms."
+  ```
 - `temperature`: Randomness control. Lower values are more deterministic; higher values are more creative.
+  ```python
+  temperature=0.7
+  ```
 - `top_p`: Nucleus sampling threshold in the range `[0.0, 1.0]`.
+  ```python
+  top_p=0.9
+  ```
 - `top_k`: Limits sampling to top-k token candidates.
+  ```python
+  top_k=40
+  ```
 - `max_tokens`: Maximum output token budget.
+  ```python
+  max_tokens=1024
+  ```
 - `thinking_level`: Controls reasoning depth for supported Gemini models.
+  ```python
+  thinking_level=GOOGLE_TEXT_THINKING_LEVEL.HIGH
+  ```
 - `structured_output`: Returns metadata-rich dictionary instead of plain text.
+  ```python
+  structured_output=True
+  ```
 - `Stream`: When `True`, `invoke()` returns an iterator of text chunks.
+  ```python
+  Stream=True
+  ```
 - `max_retries`: Total retry attempts on transient failures.
+  ```python
+  max_retries=5
+  ```
 - `timeout`: Request timeout in seconds.
+  ```python
+  timeout=60.0
+  ```
 - `backoff_factor`: Retry delay factor using exponential backoff.
+  ```python
+  backoff_factor=1.5
+  ```
 
 ### Vision-only parameter
 
 - `media_resolution`: Vision input quality hint. Supported enum values:
-	- `GOOGLE_VISION_MEDIA_RESOLUTION.LOW`
-	- `GOOGLE_VISION_MEDIA_RESOLUTION.MEDIUM`
-	- `GOOGLE_VISION_MEDIA_RESOLUTION.HIGH`
+  - `GOOGLE_VISION_MEDIA_RESOLUTION.LOW`
+  - `GOOGLE_VISION_MEDIA_RESOLUTION.MEDIUM`
+  - `GOOGLE_VISION_MEDIA_RESOLUTION.HIGH`
 
 ## Structured Output
 
