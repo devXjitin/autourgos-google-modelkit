@@ -1,9 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "autourgos-google-kit"
+name = "autourgos-google-modelkit"
 version = "0.1.0"
-description = "Add your description here"
+description = "Google Gemini text and vision model wrappers for Autourgos"
 readme = "README.md"
 requires-python = ">=3.13"
+authors = [
+    { name = "DevxJitin" },
+]
+keywords = ["autourgos", "google", "gemini", "llm", "vision", "agent"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "google-genai>=1.68.0",
 ]
@@ -12,3 +28,13 @@ dependencies = [
 test = [
     "pytest>=8.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/DevxJitin/autourgos-google-modelkit"
+Repository = "https://github.com/DevxJitin/autourgos-google-modelkit"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
