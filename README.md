@@ -1,6 +1,6 @@
 # Autourgos Google Model Kit
 
-![Gemini](./README/Image_Dark.png)
+![Gemini](https://raw.githubusercontent.com/DevxJitin/autourgos-google-modelkit/main/README/Image_Dark.png)
 
 ![Pypi](https://img.shields.io/badge/Pypi-0.1.0-blue?style=flat-square)
 ![Release](https://img.shields.io/badge/Release-Early%20Development-brown?style=flat-square)
