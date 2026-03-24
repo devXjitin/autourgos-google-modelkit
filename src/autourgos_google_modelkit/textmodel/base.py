@@ -4,7 +4,7 @@ Google Gemini Text Model Provider
 Production-ready wrapper around Google's Generative AI client.
 
 Author: DevxJitin & QueenSonia
-Version: 0.1.0
+Version: 0.1.1
 """
 
 from typing import Optional, Any, Dict, Iterator
@@ -134,7 +134,7 @@ class GoogleTextModel:
         top_p: Optional[float] = None,
         top_k: Optional[int] = None,
         max_tokens: Optional[int] = None,
-        thinking_level: str | GOOGLE_TEXT_THINKING_LEVEL | None = GOOGLE_TEXT_THINKING_LEVEL.MINIMAL,
+        thinking_level: str | GOOGLE_TEXT_THINKING_LEVEL | None = None,
         structured_output: bool = False,
         Stream: bool = False,
         max_retries: int = 3,
@@ -155,7 +155,7 @@ class GoogleTextModel:
             max_tokens: Maximum tokens to generate
             thinking_level: Gemini 3 thinking level (``GOOGLE_TEXT_THINKING_LEVEL`` enum or
                 string: ``minimal``, ``low``, ``medium``, ``high``).
-                Defaults to ``GOOGLE_TEXT_THINKING_LEVEL.MINIMAL``.
+                Defaults to ``None`` (disabled).
             structured_output: When ``True``, ``invoke`` returns a dictionary
                 containing response text, token usage, and estimated cost.
                 Defaults to ``False``.

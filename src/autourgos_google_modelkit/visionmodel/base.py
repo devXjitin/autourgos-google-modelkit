@@ -250,7 +250,7 @@ class GoogleVisionModel:
         top_p: Optional[float] = None,
         top_k: Optional[int] = None,
         max_tokens: Optional[int] = None,
-        thinking_level: str | GOOGLE_VISION_THINKING_LEVEL | None = GOOGLE_VISION_THINKING_LEVEL.MINIMAL,
+        thinking_level: str | GOOGLE_VISION_THINKING_LEVEL | None = None,
         media_resolution: str | GOOGLE_VISION_MEDIA_RESOLUTION | None = GOOGLE_VISION_MEDIA_RESOLUTION.HIGH,
         structured_output: bool = False,
         Stream: bool = False,

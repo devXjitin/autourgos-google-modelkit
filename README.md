@@ -2,7 +2,7 @@
 
 ![Gemini](https://raw.githubusercontent.com/DevxJitin/autourgos-google-modelkit/main/README/Image_Dark.png)
 
-![Pypi](https://img.shields.io/badge/Pypi-0.1.0-blue?style=flat-square)
+![Pypi](https://img.shields.io/badge/Pypi-0.1.1-blue?style=flat-square)
 ![Release](https://img.shields.io/badge/Release-Early%20Development-brown?style=flat-square)
 ![Framework](https://img.shields.io/badge/Framework-Autourgos-orange?style=flat-square)
 ![Wrapper](https://img.shields.io/badge/Wrapper-Google-brightgreen?style=flat-square)
@@ -45,6 +45,7 @@ It focuses on clean API usage, validation, retries, and structured response meta
   - [Supported Parameters for Vision Model Initialization and Configuration](#supported-parameters-for-vision-model-initialization-and-configuration)
   - [Parameter: Media Resolution](#parameter-media-resolution)
 - [Validation and Errors](#validation-and-errors)
+- [Changelog](#changelog)
 - [References](#references)
 - [Credits](#credits)
 - [Social Media](#social-media)
@@ -278,7 +279,7 @@ llm = GoogleTextModel(
 ```
 
 
-## Vision generation (```GoogleVisionModel```)
+## Vision Understanding Model (```GoogleVisionModel```)
 
 ### Basic usage
 
@@ -383,6 +384,17 @@ Error hierarchy:
 
 - Text: `GoogleTextModelError` and specialized subclasses
 - Vision: `GoogleVisionModelError` and specialized subclasses
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for full release history.
+
+### 0.1.1 (2026-03-24)
+
+- Fixed `thinking_level` compatibility by defaulting it to `None` for text and vision models.
+- Added explicit validation so unsupported models fail fast with a clear local error when `thinking_level` is set.
+- Added regression tests for unsupported thinking-level behavior.
+- Stabilized API-key-related tests by isolating environment variables in test cases.
 
 ## References
 - [Google Gemini API Documentation](https://developers.generativeai.google/api/)

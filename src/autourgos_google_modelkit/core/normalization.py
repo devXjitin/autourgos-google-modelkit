@@ -44,6 +44,20 @@ def validate_thinking_level_support(model_name: str, thinking_level: Optional[st
         return
 
     model_name_normalized = model_name.strip().lower()
+    thinking_supported_models = {
+        "gemini-3.1-pro-preview",
+        "gemini-3-pro-preview",
+        "gemini-3.1-pro-preview-customtools",
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
+    }
+
+    if model_name_normalized not in thinking_supported_models:
+        raise ValueError(
+            f"thinking_level is not supported for model '{model_name}'. "
+            "Use thinking_level=None or switch to a Gemini 3 thinking-capable model."
+        )
+
     minimal_unsupported_models = {
         "gemini-3.1-pro-preview",
         "gemini-3-pro-preview",
