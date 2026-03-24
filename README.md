@@ -187,25 +187,55 @@ llm = GoogleTextModel(
   thinking_level=GOOGLE_TEXT_THINKING_LEVEL.HIGH
   )
 ```
+#### Parameter: ```Structured Output```
+Setting `structured_output=True` returns a dictionary with response text and metadata instead of plain text.
+```python
+from autourgos_google_modelkit import GoogleTextModel
+llm = GoogleTextModel(
+  structured_output=True
+  )
+result = llm.invoke("Summarize observability in one paragraph.")
+print(result)
+```
+
+#### Parameter: ```Stream```
+Setting `Stream=True` enables real-time streaming of generated text chunks. The `invoke()` method will return an iterator that yields text chunks as they are generated.
+```python
+from autourgos_google_modelkit import GoogleTextModel
+llm = GoogleTextModel(
+  model=GOOGLE_TEXT_MODEL_NAME.GEMINI_3_1_PRO,
+  Stream=True,
+)
+stream = llm.invoke("Write a short note on clean architecture.")
+for chunk in stream:
+  print(chunk, end="", flush=True)
+print()
+```
+
+#### Parameter: ```Retries and Timeouts```
+The package includes built-in retry logic with exponential backoff for transient errors. You can configure the retry behavior using the following parameters:
+- `max_retries`: Total number of retry attempts (default: 3)
+- `timeout`: Request timeout in seconds (default: 30.0)
+- `backoff_factor`: Multiplier for calculating delay between retries (default: 1.0)
+```python
+from autourgos_google_modelkit import GoogleTextModel
+llm = GoogleTextModel(
+  max_retries=5,
+  timeout=60.0,
+  backoff_factor=1.5
+)
+```
 
 
+## Vision generation ```GoogleVisionModel```
 
-
-
-
-## Vision generation (image + prompt)
+### Basic usage
 
 ```python
 from autourgos_google_modelkit import GoogleVisionModel, GOOGLE_VISION_MODEL_NAME
 
 vision = GoogleVisionModel(model=GOOGLE_VISION_MODEL_NAME.GEMINI_3_FLASH_PREVIEW)
 
-print(
-	vision.invoke(
-		prompt="Describe the main objects in this image.",
-		image="./sample.jpg",
-	)
-)
 ```
 
 Example response:
